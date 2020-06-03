@@ -1,0 +1,136 @@
+# These environment variables must be set in CircleCI UI
+#
+# DOCKERHUB_REPO - docker hub repo, format: <username>/<repo>
+# DOCKER_USER
+# DOCKER_PASS
+#
+version: 2.1
+jobs:
+  check-format:
+    docker:
+      - image: circleci/python:buster
+    steps:
+      - checkout
+      - run:
+          name: check code is formatted with black and output diff
+          command: make check-format
+
+  check-types:
+    docker:
+      - image: circleci/python:buster
+    steps:
+      - checkout
+      - run:
+          name: check code is properly typed
+          command: make check-types
+
+  unit-test:
+    docker:
+      - image: circleci/python:buster
+    steps:
+      - checkout
+      - run:
+          name: run unit tests
+          command: make test
+
+  build-images:
+    docker:
+      - image: circleci/python:buster
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Create a version.json
+          command: |
+            # create a version.json per https://github.com/mozilla-services/Dockerflow/blob/master/docs/version_object.md
+            printf '{"commit":"%s","version":"%s","source":"https://github.com/%s/%s","build":"%s"}\n' \
+            "$CIRCLE_SHA1" \
+            "$CIRCLE_TAG" \
+            "$CIRCLE_PROJECT_USERNAME" \
+            "$CIRCLE_PROJECT_REPONAME" \
+            "$CIRCLE_BUILD_URL" > src/web/version.json
+      - run:
+          name: docker-compose build
+          command: docker-compose build
+      - run:
+          name: save built image to cache
+          command: docker save "${DOCKERHUB_REPO}:latest" | gzip -c > /tmp/docker.tgz
+      - save_cache:
+          key: v1-{{ .Branch }}-{{ epoch }}
+          paths:
+            - /tmp/docker.tgz
+
+  upload-docker-images:
+    docker:
+      - image: circleci/python:buster
+    steps:
+      - checkout
+      - setup_remote_docker
+      - restore_cache:
+          key: v1-{{.Branch}}
+      - run:
+          name: Restore Docker image cache
+          command: gunzip -c /tmp/docker.tgz | docker load
+      - run:
+          name: upload to Dockerhub
+          command: |
+            # deploy master
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              docker login -u $DOCKER_USER -p $DOCKER_PASS
+              docker-compose push web
+            elif  [ ! -z "${CIRCLE_TAG}" ]; then
+              # deploy a release tag
+              docker login -u $DOCKER_USER -p $DOCKER_PASS
+              echo "${DOCKERHUB_REPO}:${CIRCLE_TAG}"
+              docker tag "${DOCKERHUB_REPO}:latest" "${DOCKERHUB_REPO}:${CIRCLE_TAG}"
+              docker push "${DOCKERHUB_REPO}:${CIRCLE_TAG}"
+            fi
+
+orbs:
+  heroku: circleci/heroku@1.0.1
+
+workflows:
+  version: 2
+  test-build-ship:
+    jobs:
+      - check-format:
+        filters:
+          tags:
+            only: /.*/
+
+      - check-types:
+        filters:
+          tags:
+            only: /.*/
+
+      - unit-test:
+        filters:
+          tags:
+            only: /.*/
+
+      - build-images:
+          filters:
+            tags:
+              only: /.*/
+
+      - upload-docker-images:
+          requires:
+            - check-format
+            - check-types
+            - unit-test
+            - build-images
+          filters:
+            tags:
+              # only upload the docker container on semver tags
+              only: /[0-9]\.[0-9]+\.[0-9]+/
+            branches:
+              only: master
+
+      - heroku/deploy-via-git:
+          requires:
+            - check-format
+            - check-types
+            - unit-test
+          filters:
+            branches:
+              only: master
