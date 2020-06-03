@@ -1,0 +1,74 @@
+version: "3" 
+services:
+  db:
+    container_name: tlscs-dockerflow-db
+    image: postgres:12
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=tlscs_dockerflow
+    ports:
+      - "5432:5432"
+
+  web:
+    container_name: tlscs-dockerflow-web
+    build:
+        context: .
+    image: mozilla/tlscs-dockerflow
+    volumes:
+      - ./:/app
+    environment:
+      - CELERY_BROKER_URL=sqla+postgresql+psycopg2://postgres:postgres@db/tlscs_dockerflow
+      - SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://postgres:postgres@db/tlscs_dockerflow
+      - FLASK_APP=/app/src/web/api.py
+      - FLASK_ENV=development
+      - HOST=0.0.0.0
+      - PORT=8000
+    depends_on:
+      - db
+    links:
+      - db
+    ports:
+      - "8000:8000"
+
+  worker:
+    container_name: tlscs-dockerflow-worker
+    build:
+        context: .
+    image: mozilla/tlscs-dockerflow
+    volumes:
+      - ./:/app
+    environment:
+      - SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://postgres:postgres@db/tlscs_dockerflow
+      - CELERY_BROKER_URL=sqla+postgresql+psycopg2://postgres:postgres@db/tlscs_dockerflow
+    depends_on:
+      - db
+    links:
+      - db
+    command:
+      [
+         "celery", "worker", "--app=src.tasks.tasks"
+      ]
+
+  db-migration:
+    container_name: tlscs-dockerflow-db-migration
+    build:
+        context: .
+    image: mozilla/tlscs-dockerflow
+    volumes:
+      - ./:/app
+    environment:
+      - SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://postgres:postgres@db/tlscs_dockerflow
+      - FLASK_APP=/app/src/web/api.py
+      - FLASK_ENV=development
+    depends_on:
+      - db
+    links:
+      - db
+    command:
+      [
+        "/opt/wait-for-it.sh",
+        "db:5432",
+        "--",
+        "flask", "db", "upgrade",
+      ]
