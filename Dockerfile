@@ -7,6 +7,8 @@ ENV PORT 8000
 ENV FLASK_ENV "production"
 ENV SQLALCHEMY_DATABASE_URI postgresql+psycopg2://pguser:pgpass@pghost/dbname
 ENV CELERY_BROKER_URL sqla+postgresql://pguser:pgpass@pghost/dbname
+ENV OPENSSL_INCLUDE_DIR /usr/include/openssl
+ENV OPENSSL_LIB_DIR /usr/lib/x86_64-linux-gnu
 
 RUN groupadd --gid 10001 app && \
     useradd --uid 10001 --gid 10001 --shell /usr/sbin/nologin app
@@ -19,7 +21,10 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
             ca-certificates \
             build-essential \
             curl \
-            libpq-dev
+            libssl-dev \
+            libpq-dev \
+            firefox-esr \
+            git
 
 WORKDIR /app
 
@@ -30,6 +35,10 @@ RUN curl -o /opt/wait-for-it.sh https://raw.githubusercontent.com/vishnubob/wait
       chmod +x /opt/wait-for-it.sh
 
 USER app
+
+RUN mkdir /tmp/rust
+ENV HOME /tmp/rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > /tmp/rustup.sh && sh /tmp/rustup.sh -y 
 
 ENTRYPOINT [ ]
 CMD ["gunicorn", "--chdir", "src", "src.web.wsgi:app"]

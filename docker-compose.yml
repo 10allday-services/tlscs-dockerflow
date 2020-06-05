@@ -47,7 +47,7 @@ services:
       - db
     command:
       [
-         "celery", "worker", "--app=src.tasks.tasks"
+        "sh", "/app/scripts/worker.sh"
       ]
 
   db-migration:

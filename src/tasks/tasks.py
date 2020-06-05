@@ -125,7 +125,8 @@ class SymantecJob(object):
                "-t", "beta",
                "-p1", "security.pki.distrust_ca_policy;2",
                "-b", "beta",
-               "-p2", "security.pki.distrust_ca_policy;0"
+               "-p2", "security.pki.distrust_ca_policy;0",
+               "--onecrlpin", "20200604-issue-157",
                ]
         log.info("Running `%s`" % " ".join(cmd))
         run(cmd, check=True)
@@ -255,7 +256,8 @@ class TLSDeprecationJob(object):
                "-t", "beta",
                "-p1", "security.tls.version.min;3",
                "-b", "beta",
-               "-p2", "security.tls.version.min;1"
+               "-p2", "security.tls.version.min;1",
+               "--onecrlpin", "20200604-issue-157",
                ]
         log.info("Running `%s`" % " ".join(cmd))
         run(cmd, check=True)
@@ -348,7 +350,7 @@ class SrcUpdateJob(object):
     def run(self):
         log.info("Updating sources")
         # Setting distrust policy to 0 as long as we need to capture hosts for Symantec regressions
-        cmd = [self.tlscanary_binary, "-w", "/tmp/workdir", "srcupdate", "-p", "security.pki.distrust_ca_policy;0"]
+        cmd = [self.tlscanary_binary, "-w", "/tmp/workdir", "srcupdate", "-p", "security.pki.distrust_ca_policy;0", "--onecrlpin", "20200604-issue-157"]
         log.info("Running `%s`" % " ".join(cmd))
         run(cmd, check=True)
         log.info("Completed source update job")
